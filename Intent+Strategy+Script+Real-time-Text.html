@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>意图/策略/话术 可视化编辑器</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --muted: #9aa4b2;
+      --text: #e5e7eb;
+      --accent: #60a5fa;
+      --accent-2: #34d399;
+      --danger: #ef4444;
+      --card: #0b1220;
+      --border: #1f2937;
+      --shadow: 0 10px 30px rgba(0,0,0,0.4);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 20% -10%, #0a1324 0%, var(--bg) 40%),
+                  radial-gradient(800px 800px at 80% 120%, #07101f 0%, var(--bg) 50%);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0));
+      position: sticky; top:0; z-index: 50;
+    }
+    .title { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+    .sub { color: var(--muted); font-size: 12px; }
+
+    .toolbar { margin-left:auto; display:flex; gap:8px; flex-wrap: wrap; }
+    button, .btn {
+      background: linear-gradient(180deg, #1f2937, #111827);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform .08s ease, border-color .2s ease;
+      user-select: none;
+    }
+    button:hover { transform: translateY(-1px); border-color: #334155; }
+    button:active { transform: translateY(0); }
+    .btn-ghost { background: transparent; box-shadow:none; }
+    .btn-accent { background: linear-gradient(180deg, #2563eb, #1d4ed8); border-color:#3b82f6; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1.2fr;
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .col {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      min-height: calc(100vh - 110px);
+      box-shadow: var(--shadow);
+      display:flex; flex-direction:column;
+    }
+
+    .col h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; letter-spacing:.3px; }
+    .hint { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+
+    .list { display:flex; flex-direction:column; gap:10px; }
+
+    .item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      position: relative;
+    }
+
+    .item-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .item-label { font-size:12px; color: var(--muted); }
+    .item-actions { display:flex; gap:6px; }
+
+    .danger { color: var(--danger); }
+
+    input[type="text"], textarea, select {
+      width: 100%;
+      background: #0b1220;
+      border: 1px solid #1f2937;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    select[multiple] { min-height: 80px; }
+
+    .add-row {
+      margin-top: 10px;
+      display:flex; justify-content:center;
+    }
+
+    .preview {
+      white-space: pre-wrap;
+      background: #0b1220;
+      border: 1px dashed #1f2937;
+      border-radius: 12px;
+      padding: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      line-height: 1.6;
+      overflow:auto;
+      flex:1;
+    }
+
+    .footer { display:flex; gap:8px; margin-top:10px; }
+    .tag { font-size:11px; color:var(--muted); }
+    .row { display:grid; grid-template-columns: 1fr; gap:6px; }
+    .mini-row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+
+    .empty { color: #64748b; font-style: italic; }
+    .small { font-size: 12px; color: var(--muted); }
+    .sep { height: 1px; background: var(--border); margin: 6px 0; }
+
+    @media (max-width: 1200px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+      .col { min-height: auto; }
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">意图 / 策略 / 话术 / 实时文本</div>
+      <div class="sub">提示：文本内容实时生成，并自动本地保存（localStorage）</div>
+    </div>
+    <div class="toolbar">
+      <button id="btnExport" title="导出为TXT">导出TXT</button>
+      <button id="btnCopy" class="btn-accent" title="复制右侧文本">复制生成文本</button>
+      <button id="btnReset" class="btn-ghost" title="清空全部数据">清空</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- 栏1：意图 -->
+    <section class="col" id="col-intents">
+      <h2>1意图</h2>
+      <div class="list" id="intentList"></div>
+      <div class="add-row"><button id="addIntent">＋ 新增意图</button></div>
+    </section>
+
+    <!-- 栏2：Strategy -->
+    <section class="col" id="col-strategies">
+      <h2>2Strategy</h2>
+      <div class="list" id="strategyList"></div>
+      <div class="add-row"><button id="addStrategy">＋ 新增 Strategy</button></div>
+    </section>
+
+    <!-- 栏3：话术 -->
+    <section class="col" id="col-scripts">
+      <h2>3话术</h2>
+      <div class="list" id="scriptList"></div>
+      <div class="add-row"><button id="addScript">＋ 新增 话术</button></div>
+    </section>
+
+    <!-- 栏4：生成文本 -->
+    <section class="col" id="col-output">
+      <h2>4生成的对应文本</h2>
+      <div class="preview" id="outputText"><span class="empty">暂无内容，请先在左侧添加意图/策略/话术。</span></div>
+    </section>
+  </main>
+
+<script>
+(function(){
+  const LS_KEY = 'fourPaneEditorState.v1';
+
+  /** @type {{intents: Array, strategies: string[], scripts: string[]}} */
+  let state = {
+    intents: [], // { text: string, strategyIndex: number|null, scriptIndices: number[], command: string }
+    strategies: [],
+    scripts: []
+  };
+
+  // DOM refs
+  const intentList = document.getElementById('intentList');
+  const strategyList = document.getElementById('strategyList');
+  const scriptList = document.getElementById('scriptList');
+  const outputText = document.getElementById('outputText');
+
+  // Toolbar
+  document.getElementById('btnCopy').addEventListener('click', () => {
+    const text = buildOutput();
+    navigator.clipboard.writeText(text).then(()=>{
+      flash('已复制到剪贴板');
+    });
+  });
+
+  document.getElementById('btnExport').addEventListener('click', () => {
+    const text = buildOutput();
+    const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '生成文本.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    if (!confirm('确定要清空全部数据吗？此操作不可恢复。')) return;
+    state = { intents: [], strategies: [], scripts: [] };
+    persist();
+    renderAll();
+  });
+
+  // Add buttons
+  document.getElementById('addIntent').addEventListener('click', () => {
+    state.intents.push({ text: '', strategyIndex: null, scriptIndices: [], command: '' });
+    persist();
+    renderIntents();
+    renderOutput();
+  });
+
+  document.getElementById('addStrategy').addEventListener('click', () => {
+    state.strategies.push('');
+    persist();
+    renderStrategies();
+    renderIntents(); // refresh dropdowns
+    renderOutput();
+  });
+
+  document.getElementById('addScript').addEventListener('click', () => {
+    state.scripts.push('');
+    persist();
+    renderScripts();
+    renderIntents(); // refresh multiselects
+    renderOutput();
+  });
+
+  // Persistence
+  function persist(){
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+  function load(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) state = JSON.parse(raw);
+    }catch(e){ console.warn('load fail', e); }
+  }
+
+  function renderAll(){
+    renderStrategies();
+    renderScripts();
+    renderIntents();
+    renderOutput();
+  }
+
+  // Renderers
+  function renderIntents(){
+    intentList.innerHTML = '';
+    if (state.intents.length === 0){
+      intentList.innerHTML = `<div class="small empty">尚未添加意图，点击下方“新增意图”。</div>`;
+      return;
+    }
+
+    state.intents.forEach((it, idx) => {
+      const item = document.createElement('div');
+      item.className = 'item';
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'item-header';
+      header.innerHTML = `<div class="item-label">意图${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className = 'item-actions';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn';
+      delBtn.innerHTML = '删除';
+      delBtn.addEventListener('click', () => {
+        if (!confirm(`删除 意图${idx+1} ？`)) return;
+        state.intents.splice(idx,1);
+        persist();
+        renderIntents();
+        renderOutput();
+      });
+
+      actions.appendChild(delBtn);
+      header.appendChild(actions);
+
+      // Body
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const ta = document.createElement('textarea');
+      ta.placeholder = '请输入意图内容…';
+      ta.value = it.text || '';
+      ta.addEventListener('input', (e)=>{
+        state.intents[idx].text = e.target.value;
+        persist();
+        renderOutput();
+      });
+
+      const cmd = document.createElement('input');
+      cmd.type = 'text';
+      cmd.placeholder = '对应命令（可选）';
+      cmd.value = it.command || '';
+      cmd.addEventListener('input', (e)=>{
+        state.intents[idx].command = e.target.value;
+        persist();
+      });
+
+      // Strategy select
+      const strategyWrap = document.createElement('div');
+      strategyWrap.className = 'mini-row';
+
+      const strategySel = document.createElement('select');
+      const defaultOpt = new Option('选择策略（strategy n）', '', it.strategyIndex===null);
+      strategySel.appendChild(defaultOpt);
+      state.strategies.forEach((s, sidx) => {
+        const opt = new Option(`strategy ${sidx+1}：${clip(s)}`, String(sidx), it.strategyIndex===sidx);
+        strategySel.appendChild(opt);
+      });
+      strategySel.addEventListener('change', (e)=>{
+        const v = e.target.value === '' ? null : Number(e.target.value);
+        state.intents[idx].strategyIndex = v;
+        persist();
+        renderOutput();
+      });
+
+      // Scripts multi-select
+      const scriptSel = document.createElement('select');
+      scriptSel.multiple = true;
+      state.scripts.forEach((sc, scidx) => {
+        const opt = new Option(`话术 ${scidx+1}：${clip(sc)}`, String(scidx));
+        if (it.scriptIndices?.includes(scidx)) opt.selected = true;
+        scriptSel.appendChild(opt);
+      });
+      scriptSel.addEventListener('change', () => {
+        const selected = Array.from(scriptSel.selectedOptions).map(o=>Number(o.value));
+        state.intents[idx].scriptIndices = selected;
+        persist();
+        renderOutput();
+      });
+
+      // Labels
+      const lab1 = document.createElement('div'); lab1.className='tag'; lab1.textContent='绑定策略';
+      const lab2 = document.createElement('div'); lab2.className='tag'; lab2.textContent='选择多个对应话术（按Ctrl/⌘ 可多选）';
+
+      strategyWrap.appendChild(lab1);
+      strategyWrap.appendChild(lab2);
+      strategyWrap.appendChild(strategySel);
+      strategyWrap.appendChild(scriptSel);
+
+      row.appendChild(ta);
+      row.appendChild(cmd);
+      row.appendChild(strategyWrap);
+
+      item.appendChild(header);
+      item.appendChild(row);
+
+      intentList.appendChild(item);
+    });
+  }
+
+  function renderStrategies(){
+    strategyList.innerHTML='';
+    if (state.strategies.length===0){
+      strategyList.innerHTML = `<div class="small empty">尚未添加 Strategy，点击下方“新增 Strategy”。</div>`;
+      return;
+    }
+
+    state.strategies.forEach((s, idx)=>{
+      const item = document.createElement('div');
+      item.className='item';
+
+      const header = document.createElement('div');
+      header.className='item-header';
+      header.innerHTML = `<div class="item-label">strategy ${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className='item-actions';
+      const del = document.createElement('button');
+      del.className='btn';
+      del.textContent='删除';
+      del.addEventListener('click', ()=>{
+        if (!confirm(`删除 strategy ${idx+1} ？同时会取消引用此策略的意图。`)) return;
+        state.strategies.splice(idx,1);
+        // 清理意图引用的索引
+        state.intents = state.intents.map(it=>{
+          if (it.strategyIndex===null) return it;
+          if (it.strategyIndex===idx) it.strategyIndex=null; // 被删
+          else if (it.strategyIndex>idx) it.strategyIndex--; // 索引左移
+          return it;
+        });
+        persist();
+        renderStrategies();
+        renderIntents();
+        renderOutput();
+      });
+      actions.appendChild(del);
+      header.appendChild(actions);
+
+      const input = document.createElement('textarea');
+      input.placeholder='填写 strategy 内容…';
+      input.value = s || '';
+      input.addEventListener('input', (e)=>{
+        state.strategies[idx] = e.target.value;
+        persist();
+        renderIntents(); // 更新下拉显示摘要
+        renderOutput();
+      });
+
+      item.appendChild(header);
+      item.appendChild(input);
+      strategyList.appendChild(item);
+    });
+  }
+
+  function renderScripts(){
+    scriptList.innerHTML='';
+    if (state.scripts.length===0){
+      scriptList.innerHTML = `<div class="small empty">尚未添加话术，点击下方“新增 话术”。</div>`;
+      return;
+    }
+
+    state.scripts.forEach((sc, idx)=>{
+      const item = document.createElement('div');
+      item.className='item';
+
+      const header = document.createElement('div');
+      header.className='item-header';
+      header.innerHTML = `<div class="item-label">话术${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className='item-actions';
+      const del = document.createElement('button');
+      del.className='btn';
+      del.textContent='删除';
+      del.addEventListener('click', ()=>{
+        if (!confirm(`删除 话术${idx+1} ？同时会从所有意图中移除此话术。`)) return;
+        state.scripts.splice(idx,1);
+        // 清理意图引用
+        state.intents = state.intents.map(it=>{
+          it.scriptIndices = (it.scriptIndices||[])
+            .filter(i => i!==idx)
+            .map(i => i>idx ? i-1 : i);
+          return it;
+        });
+        persist();
+        renderScripts();
+        renderIntents();
+        renderOutput();
+      });
+      actions.appendChild(del);
+      header.appendChild(actions);
+
+      const input = document.createElement('textarea');
+      input.placeholder='填写话术内容…';
+      input.value = sc || '';
+      input.addEventListener('input', (e)=>{
+        state.scripts[idx] = e.target.value;
+        persist();
+        renderIntents(); // 更新多选显示摘要
+        renderOutput();
+      });
+
+      item.appendChild(header);
+      item.appendChild(input);
+      scriptList.appendChild(item);
+    });
+  }
+
+  function sectionIntentLines(){
+    const lines = [];
+    state.intents.forEach((it, idx) => {
+      const n = idx+1;
+      const text = (it.text||'').trim();
+      const strategyNo = it.strategyIndex===null ? '' : String(it.strategyIndex+1);
+      const scriptNos = (it.scriptIndices||[]).map(i => i+1);
+      const scriptNosStr = scriptNos.length ? scriptNos.join('**+**script ') : '';
+      const line = `**意图${n}**:**${text}**:执行策略**strategy ${strategyNo}**+追加话术**script ${scriptNosStr}**`;
+      lines.push(line);
+    });
+    return lines.join('\n');
+  }
+
+  function sectionStrategyLines(){
+    const lines = [];
+    state.strategies.forEach((s, idx)=>{
+      const content = (s||'').trim();
+      lines.push(`**strategy ${idx+1}**: **${content}**`);
+    });
+    return lines.join('\n');
+  }
+
+  function sectionScriptLines(){
+    const lines = [];
+    state.scripts.forEach((sc, idx)=>{
+      const content = (sc||'').trim();
+      lines.push(`**script ${idx+1}**: **${content}**`);
+    });
+    return lines.join('\n');
+  }
+
+  function renderOutput(){
+    const parts = [];
+    const intentsBlock = sectionIntentLines();
+    const strategiesBlock = sectionStrategyLines();
+    const scriptsBlock = sectionScriptLines();
+
+    if (state.intents.length){
+      parts.push('一,意图');
+      parts.push(intentsBlock);
+    }
+    if (state.strategies.length){
+      parts.push('\n二,策略');
+      parts.push(strategiesBlock);
+    }
+    if (state.scripts.length){
+      parts.push('\n三,话术');
+      parts.push(scriptsBlock);
+    }
+
+    const finalText = parts.join('\n');
+    outputText.textContent = finalText || '暂无内容';
+  }
+
+  function buildOutput(){
+    // 与预览一致，用于复制/导出
+    const parts = [];
+    const intentsBlock = sectionIntentLines();
+    const strategiesBlock = sectionStrategyLines();
+    const scriptsBlock = sectionScriptLines();
+
+    parts.push('一,意图');
+    parts.push(intentsBlock || '');
+    parts.push('\n二,策略');
+    parts.push(strategiesBlock || '');
+    parts.push('\n三,话术');
+    parts.push(scriptsBlock || '');
+
+    return parts.join('\n').replace(/\n{3,}/g, '\n\n');
+  }
+
+  function clip(str){
+    str = (str||'').replace(/\s+/g,' ').trim();
+    return str.length>14 ? str.slice(0,14)+'…' : str;
+  }
+
+  function flash(msg){
+    const el = document.createElement('div');
+    el.textContent = msg;
+    el.style.position='fixed'; el.style.right='16px'; el.style.bottom='16px';
+    el.style.padding='10px 12px'; el.style.background='#111827'; el.style.border='1px solid #334155';
+    el.style.borderRadius='10px'; el.style.boxShadow='var(--shadow)';
+    document.body.appendChild(el);
+    setTimeout(()=>{ el.remove(); }, 1600);
+  }
+
+  // Init
+  load();
+  renderStrategies();
+  renderScripts();
+  renderIntents();
+  renderOutput();
+})();
+</script>
+</body>
+</html>
