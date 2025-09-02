@@ -1,3 +1,6 @@
+下面是已**删除“对应命令（可选）”输入框**后的完整文件（已移除相关 JS、DOM 与注释，不影响现有本地存储的数据使用）：
+
+```html
 <!doctype html>
 <html lang="zh-CN">
 <head>
@@ -123,21 +126,21 @@
 
     .danger { color: var(--danger); }
 
-    /* 输入控件统一高度 80px */
+    /* 输入控件统一高度（此处沿用你提供的 80px 设置） */
     input[type="text"], textarea, select {
       width: 100%;
       background: #0b1220;
       border: 1px solid #1f2937;
       color: var(--text);
       border-radius: 10px;
-      padding: 2px 8px;       /* 让 23px 高度更紧凑 */
+      padding: 2px 8px;
       font-size: 14px;
       outline: none;
       height: 80px;
       min-height: 23px;
       line-height: 19px;
     }
-    textarea { resize: vertical; } /* 仍允许拉伸，如不需要可设为 none */
+    textarea { resize: vertical; }
 
     .add-row {
       margin-top: 10px;
@@ -224,11 +227,11 @@
   setHeaderVar();
   window.addEventListener('resize', setHeaderVar);
 
-  const LS_KEY = 'fourPaneEditorState.v3'; // 升级版本（新增勾选 UI）
+  const LS_KEY = 'fourPaneEditorState.v3'; // 保持版本，继续复用现有数据
 
   /** @type {{intents: Array, strategies: string[], scripts: string[], questions: string[]}} */
   let state = {
-    // intent: { text: string, strategyIndex: number|null, scriptIndices: number[], questionIndices: number[], command: string }
+    // intent: { text: string, strategyIndex: number|null, scriptIndices: number[], questionIndices: number[] }
     intents: [],
     strategies: [],
     scripts: [],
@@ -267,7 +270,7 @@
 
   // Add buttons
   document.getElementById('addIntent').addEventListener('click', () => {
-    state.intents.push({ text: '', strategyIndex: null, scriptIndices: [], questionIndices: [], command: '' });
+    state.intents.push({ text: '', strategyIndex: null, scriptIndices: [], questionIndices: [] });
     persist();
     renderIntents();
   });
@@ -301,15 +304,30 @@
     try{
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
-        state = JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        // 兼容旧数据：如果旧 intent 带有 command 字段，忽略即可
+        parsed.intents = (parsed.intents||[]).map(it => ({
+          text: it.text || '',
+          strategyIndex: typeof it.strategyIndex === 'number' ? it.strategyIndex : null,
+          scriptIndices: Array.isArray(it.scriptIndices) ? it.scriptIndices : [],
+          questionIndices: Array.isArray(it.questionIndices) ? it.questionIndices : []
+        }));
+        state = { intents: parsed.intents, strategies: parsed.strategies||[], scripts: parsed.scripts||[], questions: parsed.questions||[] };
       } else {
-        // 兼容旧版本
+        // 兼容更旧版本
         const oldKeys = ['fourPaneEditorState.v2', 'fourPaneEditorState.v1'];
         for (const k of oldKeys){
           const rawOld = localStorage.getItem(k);
           if (rawOld){
             const old = JSON.parse(rawOld);
             state = { intents: old.intents||[], strategies: old.strategies||[], scripts: old.scripts||[], questions: old.questions||[] };
+            // 清理旧 intents 中的 command
+            state.intents = state.intents.map(it => ({
+              text: it.text || '',
+              strategyIndex: typeof it.strategyIndex === 'number' ? it.strategyIndex : null,
+              scriptIndices: Array.isArray(it.scriptIndices) ? it.scriptIndices : [],
+              questionIndices: Array.isArray(it.questionIndices) ? it.questionIndices : []
+            }));
             break;
           }
         }
@@ -368,15 +386,6 @@
         state.intents[idx].text = e.target.value;
         persist();
       });
-
-      // const cmd = document.createElement('input');
-      // cmd.type = 'text';
-      // cmd.placeholder = '对应命令（可选）';
-      // cmd.value = it.command || '';
-      // cmd.addEventListener('input', (e)=>{
-      //   state.intents[idx].command = e.target.value;
-      //   persist();
-      // });
 
       // Strategy select（仍用下拉）
       const strategyWrap = document.createElement('div');
@@ -466,7 +475,6 @@
 
       // 组装
       row.appendChild(ta);
-      row.appendChild(cmd);
       row.appendChild(strategyWrap);
       row.appendChild(scriptsBlock);
       row.appendChild(questionsBlock);
@@ -732,3 +740,4 @@
 </script>
 </body>
 </html>
+```
