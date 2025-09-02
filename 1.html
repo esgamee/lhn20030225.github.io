@@ -369,14 +369,14 @@
         persist();
       });
 
-      const cmd = document.createElement('input');
-      cmd.type = 'text';
-      cmd.placeholder = '对应命令（可选）';
-      cmd.value = it.command || '';
-      cmd.addEventListener('input', (e)=>{
-        state.intents[idx].command = e.target.value;
-        persist();
-      });
+      // const cmd = document.createElement('input');
+      // cmd.type = 'text';
+      // cmd.placeholder = '对应命令（可选）';
+      // cmd.value = it.command || '';
+      // cmd.addEventListener('input', (e)=>{
+      //   state.intents[idx].command = e.target.value;
+      //   persist();
+      // });
 
       // Strategy select（仍用下拉）
       const strategyWrap = document.createElement('div');
