@@ -1,0 +1,673 @@
+```html
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>意图/策略/话术/追单问题 可视化编辑器</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #111827;
+      --panel-2: #0f172a;
+      --muted: #9aa4b2;
+      --text: #e5e7eb;
+      --accent: #60a5fa;
+      --accent-2: #34d399;
+      --danger: #ef4444;
+      --card: #0b1220;
+      --border: #1f2937;
+      --shadow: 0 10px 30px rgba(0,0,0,0.4);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; } /* 页面不滚动，改为各栏独立滚动 */
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+      background: radial-gradient(1200px 800px at 20% -10%, #0a1324 0%, var(--bg) 40%),
+                  radial-gradient(800px 800px at 80% 120%, #07101f 0%, var(--bg) 50%);
+      color: var(--text);
+    }
+    header {
+      padding: 16px 24px;
+      display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0));
+      position: sticky; top:0; z-index: 50;
+    }
+    .title { font-size: 18px; font-weight: 700; letter-spacing: .5px; }
+    .sub { color: var(--muted); font-size: 12px; }
+
+    .toolbar { margin-left:auto; display:flex; gap:8px; flex-wrap: wrap; }
+    button, .btn {
+      background: linear-gradient(180deg, #1f2937, #111827);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: var(--shadow);
+      transition: transform .08s ease, border-color .2s ease;
+      user-select: none;
+    }
+    button:hover { transform: translateY(-1px); border-color: #334155; }
+    button:active { transform: translateY(0); }
+    .btn-ghost { background: transparent; box-shadow:none; }
+    .btn-accent { background: linear-gradient(180deg, #2563eb, #1d4ed8); border-color:#3b82f6; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1.2fr;
+      gap: 14px;
+      padding: 16px;
+      height: calc(100vh - var(--header-h, 80px)); /* 独立滚动关键：main 高度固定 */
+      overflow: hidden; /* 不让 main 自己滚动 */
+    }
+
+    .col {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px;
+      box-shadow: var(--shadow);
+      display:flex; flex-direction:column;
+      height: 100%;     /* 填满 main 高度 */
+      min-height: 0;    /* 允许压缩以产生滚动 */
+      overflow: auto;   /* 开启每栏独立滚动 */
+    }
+
+    .col h2 { margin: 0 0 8px; font-size: 14px; font-weight: 700; letter-spacing:.3px; }
+    .hint { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+
+    .list { display:flex; flex-direction:column; gap:10px; }
+
+    .item {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      position: relative;
+    }
+
+    .item-header { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+    .item-label { font-size:12px; color: var(--muted); }
+    .item-actions { display:flex; gap:6px; }
+
+    .danger { color: var(--danger); }
+
+    input[type="text"], textarea, select {
+      width: 100%;
+      background: #0b1220;
+      border: 1px solid #1f2937;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    select[multiple] { min-height: 80px; }
+
+    .add-row {
+      margin-top: 10px;
+      display:flex; justify-content:center;
+    }
+
+    .footer { display:flex; gap:8px; margin-top:10px; }
+    .tag { font-size:11px; color:var(--muted); }
+    .row { display:grid; grid-template-columns: 1fr; gap:6px; }
+    .mini-row { display:grid; grid-template-columns: 1fr 1fr; gap:8px; }
+
+    .empty { color: #64748b; font-style: italic; }
+    .small { font-size: 12px; color: var(--muted); }
+    .sep { height: 1px; background: var(--border); margin: 6px 0; }
+
+    @media (max-width: 1200px) {
+      .grid { grid-template-columns: 1fr 1fr; }
+      .col { min-height: 0; }
+    }
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+      .col { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="title">意图 / 策略 / 话术 / 追单问题</div>
+      <div class="sub">提示：生成文本可通过顶部按钮复制或导出（自动本地保存）</div>
+    </div>
+    <div class="toolbar">
+      <button id="btnExport" title="导出为TXT">导出TXT</button>
+      <button id="btnCopy" class="btn-accent" title="复制生成文本">复制生成文本</button>
+      <button id="btnReset" class="btn-ghost" title="清空全部数据">清空</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- 栏1：意图 -->
+    <section class="col" id="col-intents">
+      <h2>1意图</h2>
+      <div class="list" id="intentList"></div>
+      <div class="add-row"><button id="addIntent">＋ 新增意图</button></div>
+    </section>
+
+    <!-- 栏2：Strategy -->
+    <section class="col" id="col-strategies">
+      <h2>2策略</h2>
+      <div class="list" id="strategyList"></div>
+      <div class="add-row"><button id="addStrategy">＋ 新增 Strategy</button></div>
+    </section>
+
+    <!-- 栏3：话术 -->
+    <section class="col" id="col-scripts">
+      <h2>3话术</h2>
+      <div class="list" id="scriptList"></div>
+      <div class="add-row"><button id="addScript">＋ 新增 话术</button></div>
+    </section>
+
+    <!-- 栏4：追单问题 -->
+    <section class="col" id="col-questions">
+      <h2>4追单问题</h2>
+      <div class="list" id="questionList"></div>
+      <div class="add-row"><button id="addQuestion">＋ 新增 追单问题</button></div>
+      <div class="small" style="margin-top:8px;opacity:.9">
+        说明：上方新增的问题会在生成文本的“四,追单问题”中列出；
+        绑定到某个意图的问题会在该意图末尾以“+追单问题**question n**+**question m**”显示。
+      </div>
+    </section>
+  </main>
+
+<script>
+(function(){
+  // ====== 计算并写入 header 高度，保证 main 高度正确，从而实现各栏独立滚动 ======
+  function setHeaderVar(){
+    const header = document.querySelector('header');
+    const h = header ? header.getBoundingClientRect().height : 80;
+    document.documentElement.style.setProperty('--header-h', h + 'px');
+  }
+  setHeaderVar();
+  window.addEventListener('resize', setHeaderVar);
+
+  const LS_KEY = 'fourPaneEditorState.v2'; // 存储版本
+
+  /** @type {{intents: Array, strategies: string[], scripts: string[], questions: string[]}} */
+  let state = {
+    // intent: { text: string, strategyIndex: number|null, scriptIndices: number[], questionIndices: number[], command: string }
+    intents: [],
+    strategies: [],
+    scripts: [],
+    questions: []
+  };
+
+  // DOM refs
+  const intentList = document.getElementById('intentList');
+  const strategyList = document.getElementById('strategyList');
+  const scriptList = document.getElementById('scriptList');
+  const questionList = document.getElementById('questionList');
+
+  // Toolbar
+  document.getElementById('btnCopy').addEventListener('click', () => {
+    const text = buildOutput();
+    navigator.clipboard.writeText(text).then(()=>{ flash('已复制到剪贴板'); });
+  });
+
+  document.getElementById('btnExport').addEventListener('click', () => {
+    const text = buildOutput();
+    const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '生成文本.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  document.getElementById('btnReset').addEventListener('click', () => {
+    if (!confirm('确定要清空全部数据吗？此操作不可恢复。')) return;
+    state = { intents: [], strategies: [], scripts: [], questions: [] };
+    persist();
+    renderAll();
+  });
+
+  // Add buttons
+  document.getElementById('addIntent').addEventListener('click', () => {
+    state.intents.push({ text: '', strategyIndex: null, scriptIndices: [], questionIndices: [], command: '' });
+    persist();
+    renderIntents();
+  });
+
+  document.getElementById('addStrategy').addEventListener('click', () => {
+    state.strategies.push('');
+    persist();
+    renderStrategies();
+    renderIntents(); // refresh dropdowns
+  });
+
+  document.getElementById('addScript').addEventListener('click', () => {
+    state.scripts.push('');
+    persist();
+    renderScripts();
+    renderIntents(); // refresh multiselects
+  });
+
+  document.getElementById('addQuestion').addEventListener('click', () => {
+    state.questions.push('');
+    persist();
+    renderQuestions();
+    renderIntents(); // refresh multiselects
+  });
+
+  // Persistence
+  function persist(){
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }
+  function load(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        state = JSON.parse(raw);
+      } else {
+        // 兼容旧版本（无 questions 字段）
+        const rawV1 = localStorage.getItem('fourPaneEditorState.v1');
+        if (rawV1) {
+          const old = JSON.parse(rawV1);
+          state = { ...old, questions: [] };
+        }
+      }
+    }catch(e){ console.warn('load fail', e); }
+  }
+
+  function renderAll(){
+    renderStrategies();
+    renderScripts();
+    renderQuestions();
+    renderIntents();
+  }
+
+  // Renderers
+  function renderIntents(){
+    intentList.innerHTML = '';
+    if (state.intents.length === 0){
+      intentList.innerHTML = `<div class="small empty">尚未添加意图，点击下方“新增意图”。</div>`;
+      return;
+    }
+
+    state.intents.forEach((it, idx) => {
+      const item = document.createElement('div');
+      item.className = 'item';
+
+      // Header
+      const header = document.createElement('div');
+      header.className = 'item-header';
+      header.innerHTML = `<div class="item-label">意图${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className = 'item-actions';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn';
+      delBtn.innerHTML = '删除';
+      delBtn.addEventListener('click', () => {
+        if (!confirm(`删除 意图${idx+1} ？`)) return;
+        state.intents.splice(idx,1);
+        persist();
+        renderIntents();
+      });
+
+      actions.appendChild(delBtn);
+      header.appendChild(actions);
+
+      // Body
+      const row = document.createElement('div');
+      row.className = 'row';
+
+      const ta = document.createElement('textarea');
+      ta.placeholder = '请输入意图内容…';
+      ta.value = it.text || '';
+      ta.addEventListener('input', (e)=>{
+        state.intents[idx].text = e.target.value;
+        persist();
+      });
+
+      const cmd = document.createElement('input');
+      cmd.type = 'text';
+      cmd.placeholder = '对应命令（可选）';
+      cmd.value = it.command || '';
+      cmd.addEventListener('input', (e)=>{
+        state.intents[idx].command = e.target.value;
+        persist();
+      });
+
+      // Strategy select
+      const strategyWrap = document.createElement('div');
+      strategyWrap.className = 'mini-row';
+
+      const strategySel = document.createElement('select');
+      const defaultOpt = new Option('选择策略（strategy n）', '', it.strategyIndex===null);
+      strategySel.appendChild(defaultOpt);
+      state.strategies.forEach((s, sidx) => {
+        const opt = new Option(`strategy ${sidx+1}：${clip(s)}`, String(sidx), it.strategyIndex===sidx);
+        strategySel.appendChild(opt);
+      });
+      strategySel.addEventListener('change', (e)=>{
+        const v = e.target.value === '' ? null : Number(e.target.value);
+        state.intents[idx].strategyIndex = v;
+        persist();
+      });
+
+      // Scripts multi-select
+      const scriptSel = document.createElement('select');
+      scriptSel.multiple = true;
+      state.scripts.forEach((sc, scidx) => {
+        const opt = new Option(`话术 ${scidx+1}：${clip(sc)}`, String(scidx));
+        if (it.scriptIndices?.includes(scidx)) opt.selected = true;
+        scriptSel.appendChild(opt);
+      });
+      scriptSel.addEventListener('change', () => {
+        const selected = Array.from(scriptSel.selectedOptions).map(o=>Number(o.value));
+        state.intents[idx].scriptIndices = selected;
+        persist();
+      });
+
+      // Questions multi-select
+      const questionSel = document.createElement('select');
+      questionSel.multiple = true;
+      state.questions.forEach((q, qidx) => {
+        const opt = new Option(`question ${qidx+1}：${clip(q)}`, String(qidx));
+        if (it.questionIndices?.includes(qidx)) opt.selected = true;
+        questionSel.appendChild(opt);
+      });
+      questionSel.addEventListener('change', () => {
+        const selected = Array.from(questionSel.selectedOptions).map(o=>Number(o.value));
+        state.intents[idx].questionIndices = selected;
+        persist();
+      });
+
+      // Labels
+      const lab1 = document.createElement('div'); lab1.className='tag'; lab1.textContent='绑定策略';
+      const lab2 = document.createElement('div'); lab2.className='tag'; lab2.textContent='选择多个对应话术（按Ctrl/⌘ 多选）';
+      const lab3 = document.createElement('div'); lab3.className='tag'; lab3.textContent='选择多个追单问题（按Ctrl/⌘ 多选）';
+
+      strategyWrap.appendChild(lab1);
+      strategyWrap.appendChild(lab2);
+      strategyWrap.appendChild(strategySel);
+      strategyWrap.appendChild(scriptSel);
+
+      // 追单问题独立一行，保持清晰
+      const questionWrap = document.createElement('div');
+      questionWrap.className = 'mini-row';
+      questionWrap.appendChild(lab3);
+      const placeholder = document.createElement('div'); placeholder.className='tag'; placeholder.textContent=' ';
+      questionWrap.appendChild(placeholder);
+      questionWrap.appendChild(questionSel);
+
+      row.appendChild(ta);
+      row.appendChild(cmd);
+      row.appendChild(strategyWrap);
+      row.appendChild(questionWrap);
+
+      item.appendChild(header);
+      item.appendChild(row);
+
+      intentList.appendChild(item);
+    });
+  }
+
+  function renderStrategies(){
+    strategyList.innerHTML='';
+    if (state.strategies.length===0){
+      strategyList.innerHTML = `<div class="small empty">尚未添加 Strategy，点击下方“新增 Strategy”。</div>`;
+      return;
+    }
+
+    state.strategies.forEach((s, idx)=>{
+      const item = document.createElement('div');
+      item.className='item';
+
+      const header = document.createElement('div');
+      header.className='item-header';
+      header.innerHTML = `<div class="item-label">strategy ${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className='item-actions';
+      const del = document.createElement('button');
+      del.className='btn';
+      del.textContent='删除';
+      del.addEventListener('click', ()=>{
+        if (!confirm(`删除 strategy ${idx+1} ？同时会取消引用此策略的意图。`)) return;
+        state.strategies.splice(idx,1);
+        // 清理意图引用的索引
+        state.intents = state.intents.map(it=>{
+          if (it.strategyIndex===null) return it;
+          if (it.strategyIndex===idx) it.strategyIndex=null; // 被删
+          else if (it.strategyIndex>idx) it.strategyIndex--; // 索引左移
+          return it;
+        });
+        persist();
+        renderStrategies();
+        renderIntents();
+      });
+      actions.appendChild(del);
+      header.appendChild(actions);
+
+      const input = document.createElement('textarea');
+      input.placeholder='填写 strategy 内容…';
+      input.value = s || '';
+      input.addEventListener('input', (e)=>{
+        state.strategies[idx] = e.target.value;
+        persist();
+        renderIntents(); // 更新下拉显示摘要
+      });
+
+      item.appendChild(header);
+      item.appendChild(input);
+      strategyList.appendChild(item);
+    });
+  }
+
+  function renderScripts(){
+    scriptList.innerHTML='';
+    if (state.scripts.length===0){
+      scriptList.innerHTML = `<div class="small empty">尚未添加话术，点击下方“新增 话术”。</div>`;
+      return;
+    }
+
+    state.scripts.forEach((sc, idx)=>{
+      const item = document.createElement('div');
+      item.className='item';
+
+      const header = document.createElement('div');
+      header.className='item-header';
+      header.innerHTML = `<div class="item-label">话术${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className='item-actions';
+      const del = document.createElement('button');
+      del.className='btn';
+      del.textContent='删除';
+      del.addEventListener('click', ()=>{
+        if (!confirm(`删除 话术${idx+1} ？同时会从所有意图中移除此话术。`)) return;
+        state.scripts.splice(idx,1);
+        // 清理意图引用
+        state.intents = state.intents.map(it=>{
+          it.scriptIndices = (it.scriptIndices||[])
+            .filter(i => i!==idx)
+            .map(i => i>idx ? i-1 : i);
+          return it;
+        });
+        persist();
+        renderScripts();
+        renderIntents();
+      });
+      actions.appendChild(del);
+      header.appendChild(actions);
+
+      const input = document.createElement('textarea');
+      input.placeholder='填写话术内容…';
+      input.value = sc || '';
+      input.addEventListener('input', (e)=>{
+        state.scripts[idx] = e.target.value;
+        persist();
+        renderIntents(); // 更新多选显示摘要
+      });
+
+      item.appendChild(header);
+      item.appendChild(input);
+      scriptList.appendChild(item);
+    });
+  }
+
+  function renderQuestions(){
+    questionList.innerHTML='';
+    if (state.questions.length===0){
+      questionList.innerHTML = `<div class="small empty">尚未添加追单问题，点击下方“新增 追单问题”。</div>`;
+      return;
+    }
+
+    state.questions.forEach((q, idx)=>{
+      const item = document.createElement('div');
+      item.className='item';
+
+      const header = document.createElement('div');
+      header.className='item-header';
+      header.innerHTML = `<div class="item-label">question ${idx+1}</div>`;
+
+      const actions = document.createElement('div');
+      actions.className='item-actions';
+      const del = document.createElement('button');
+      del.className='btn';
+      del.textContent='删除';
+      del.addEventListener('click', ()=>{
+        if (!confirm(`删除 question ${idx+1} ？同时会从所有意图中移除此问题。`)) return;
+        state.questions.splice(idx,1);
+        // 清理意图引用
+        state.intents = state.intents.map(it=>{
+          it.questionIndices = (it.questionIndices||[])
+            .filter(i => i!==idx)
+            .map(i => i>idx ? i-1 : i);
+          return it;
+        });
+        persist();
+        renderQuestions();
+        renderIntents();
+      });
+      actions.appendChild(del);
+      header.appendChild(actions);
+
+      const input = document.createElement('textarea');
+      input.placeholder='填写追单问题内容…';
+      input.value = q || '';
+      input.addEventListener('input', (e)=>{
+        state.questions[idx] = e.target.value;
+        persist();
+        renderIntents(); // 更新多选显示摘要
+      });
+
+      item.appendChild(header);
+      item.appendChild(input);
+      questionList.appendChild(item);
+    });
+  }
+
+  // ------- 生成文本（复制/导出使用） -------
+  function sectionIntentLines(){
+    const lines = [];
+    state.intents.forEach((it, idx) => {
+      const n = idx+1;
+      const text = (it.text||'').trim();
+      const strategyNo = it.strategyIndex===null ? '' : String(it.strategyIndex+1);
+
+      // scripts
+      const scriptNos = (it.scriptIndices||[]).map(i => i+1);
+      const scriptNosStr = scriptNos.length ? scriptNos.join('**+**script ') : '';
+
+      // questions
+      const questionNos = (it.questionIndices||[]).map(i => i+1);
+      const questionNosStr = questionNos.length ? questionNos.map(no => `**question ${no}**`).join('+') : '';
+
+      // line
+      const line =
+        `**意图${n}**:**${text}**:执行策略**strategy ${strategyNo}**` +
+        (scriptNos.length ? `+追加话术**script ${scriptNosStr}**` : '') +
+        (questionNos.length ? `+追单问题${questionNosStr}` : '');
+
+      lines.push(line);
+    });
+    return lines.join('\n');
+  }
+
+  function sectionStrategyLines(){
+    const lines = [];
+    state.strategies.forEach((s, idx)=>{
+      const content = (s||'').trim();
+      lines.push(`**strategy ${idx+1}**: **${content}**`);
+    });
+    return lines.join('\n');
+  }
+
+  function sectionScriptLines(){
+    const lines = [];
+    state.scripts.forEach((sc, idx)=>{
+      const content = (sc||'').trim();
+      lines.push(`**script ${idx+1}**: **${content}**`);
+    });
+    return lines.join('\n');
+  }
+
+  function sectionQuestionLines(){
+    const lines = [];
+    state.questions.forEach((q, idx)=>{
+      const content = (q||'').trim();
+      lines.push(`**question ${idx+1}**:**${content}**`);
+    });
+    return lines.join('\n');
+  }
+
+  function buildOutput(){
+    const parts = [];
+
+    // 一,意图
+    parts.push('一,意图');
+    parts.push(sectionIntentLines() || '');
+
+    // 二,策略
+    parts.push('\n二,策略');
+    parts.push(sectionStrategyLines() || '');
+
+    // 三,话术
+    parts.push('\n三,话术');
+    parts.push(sectionScriptLines() || '');
+
+    // 四,追单问题
+    parts.push('\n四,追单问题');
+    parts.push(sectionQuestionLines() || '');
+
+    return parts.join('\n').replace(/\n{3,}/g, '\n\n');
+  }
+
+  function clip(str){
+    str = (str||'').replace(/\s+/g,' ').trim();
+    return str.length>14 ? str.slice(0,14)+'…' : str;
+  }
+
+  function flash(msg){
+    const el = document.createElement('div');
+    el.textContent = msg;
+    el.style.position='fixed'; el.style.right='16px'; el.style.bottom='16px';
+    el.style.padding='10px 12px'; el.style.background='#111827'; el.style.border='1px solid #334155';
+    el.style.borderRadius='10px'; el.style.boxShadow='var(--shadow)';
+    document.body.appendChild(el);
+    setTimeout(()=>{ el.remove(); }, 1600);
+  }
+
+  // Init
+  load();
+  renderAll();
+})();
+</script>
+</body>
+</html>
+```
