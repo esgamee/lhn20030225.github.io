@@ -123,7 +123,7 @@
 
     .danger { color: var(--danger); }
 
-    /* 输入控件统一高度（此处沿用你提供的 80px 设置） */
+    /* 输入控件统一高度（你上一个版本设置为 80px，这里保留） */
     input[type="text"], textarea, select {
       width: 100%;
       background: #0b1220;
@@ -191,7 +191,7 @@
       <div class="add-row"><button id="addIntent">＋ 新增 意图</button></div>
     </section>
 
-    <!-- 栏2：Strategy -->
+    <!-- 栏2：策略 -->
     <section class="col" id="col-strategies">
       <h2>2策略</h2>
       <div class="list" id="strategyList"></div>
@@ -224,7 +224,7 @@
   setHeaderVar();
   window.addEventListener('resize', setHeaderVar);
 
-  const LS_KEY = 'fourPaneEditorState.v3'; // 保持版本，继续复用现有数据
+  const LS_KEY = 'fourPaneEditorState.v3'; // 保持版本
 
   /** @type {{intents: Array, strategies: string[], scripts: string[], questions: string[]}} */
   let state = {
@@ -276,21 +276,21 @@
     state.strategies.push('');
     persist();
     renderStrategies();
-    renderIntents(); // refresh strategy dropdowns
+    updateIntentStrategyDropdowns(); // ✅ 仅更新下拉，不重建意图列，避免清空勾选
   });
 
   document.getElementById('addScript').addEventListener('click', () => {
     state.scripts.push('');
     persist();
     renderScripts();
-    renderIntents(); // refresh checklists
+    renderIntents(); // 需要让新脚本出现在各意图的勾选区
   });
 
   document.getElementById('addQuestion').addEventListener('click', () => {
     state.questions.push('');
     persist();
     renderQuestions();
-    renderIntents(); // refresh checklists
+    renderIntents(); // 需要让新问题出现在各意图的勾选区
   });
 
   // Persistence
@@ -302,7 +302,6 @@
       const raw = localStorage.getItem(LS_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        // 兼容旧数据：如果旧 intent 带有 command 字段，忽略即可
         parsed.intents = (parsed.intents||[]).map(it => ({
           text: it.text || '',
           strategyIndex: typeof it.strategyIndex === 'number' ? it.strategyIndex : null,
@@ -310,24 +309,6 @@
           questionIndices: Array.isArray(it.questionIndices) ? it.questionIndices : []
         }));
         state = { intents: parsed.intents, strategies: parsed.strategies||[], scripts: parsed.scripts||[], questions: parsed.questions||[] };
-      } else {
-        // 兼容更旧版本
-        const oldKeys = ['fourPaneEditorState.v2', 'fourPaneEditorState.v1'];
-        for (const k of oldKeys){
-          const rawOld = localStorage.getItem(k);
-          if (rawOld){
-            const old = JSON.parse(rawOld);
-            state = { intents: old.intents||[], strategies: old.strategies||[], scripts: old.scripts||[], questions: old.questions||[] };
-            // 清理旧 intents 中的 command
-            state.intents = state.intents.map(it => ({
-              text: it.text || '',
-              strategyIndex: typeof it.strategyIndex === 'number' ? it.strategyIndex : null,
-              scriptIndices: Array.isArray(it.scriptIndices) ? it.scriptIndices : [],
-              questionIndices: Array.isArray(it.questionIndices) ? it.questionIndices : []
-            }));
-            break;
-          }
-        }
       }
     }catch(e){ console.warn('load fail', e); }
   }
@@ -392,10 +373,11 @@
       const labEmpty = document.createElement('div'); labEmpty.className='tag'; labEmpty.textContent=' ';
 
       const strategySel = document.createElement('select');
+      strategySel.dataset.role = 'strategySel'; // ✅ 标记，供局部更新用
       const defaultOpt = new Option('选择策略（strategy n）', '', it.strategyIndex===null);
       strategySel.appendChild(defaultOpt);
       state.strategies.forEach((s, sidx) => {
-        const opt = new Option(`strategy ${sidx+1}：${clip(s)}`, String(sidx), it.strategyIndex===sidx);
+        const opt = new Option(`strategy ${sidx+1}：${clip(s)}`, String(sidx), false, it.strategyIndex===sidx);
         strategySel.appendChild(opt);
       });
       strategySel.addEventListener('change', (e)=>{
@@ -420,8 +402,8 @@
       const sList = document.createElement('div');
       sList.className = 'checklist';
       state.scripts.forEach((sc, scidx)=>{
-        const row = document.createElement('label');
-        row.className = 'check-item';
+        const line = document.createElement('label');
+        line.className = 'check-item';
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = (it.scriptIndices||[]).includes(scidx);
@@ -433,9 +415,9 @@
         });
         const text = document.createElement('span');
         text.textContent = `script ${scidx+1}：${clip(sc)}`;
-        row.appendChild(cb);
-        row.appendChild(text);
-        sList.appendChild(row);
+        line.appendChild(cb);
+        line.appendChild(text);
+        sList.appendChild(line);
       });
       scriptsBlock.appendChild(sList);
 
@@ -451,8 +433,8 @@
       const qList = document.createElement('div');
       qList.className = 'checklist';
       state.questions.forEach((q, qidx)=>{
-        const row = document.createElement('label');
-        row.className = 'check-item';
+        const line = document.createElement('label');
+        line.className = 'check-item';
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = (it.questionIndices||[]).includes(qidx);
@@ -464,9 +446,9 @@
         });
         const text = document.createElement('span');
         text.textContent = `question ${qidx+1}：${clip(q)}`;
-        row.appendChild(cb);
-        row.appendChild(text);
-        qList.appendChild(row);
+        line.appendChild(cb);
+        line.appendChild(text);
+        qList.appendChild(line);
       });
       questionsBlock.appendChild(qList);
 
@@ -506,27 +488,27 @@
       del.addEventListener('click', ()=>{
         if (!confirm(`删除 strategy ${idx+1} ？同时会取消引用此策略的意图。`)) return;
         state.strategies.splice(idx,1);
-        // 清理意图引用的索引
+        // 修正意图里的 strategyIndex
         state.intents = state.intents.map(it=>{
           if (it.strategyIndex===null) return it;
-          if (it.strategyIndex===idx) it.strategyIndex=null; // 被删
-          else if (it.strategyIndex>idx) it.strategyIndex--; // 索引左移
+          if (it.strategyIndex===idx) it.strategyIndex=null;
+          else if (it.strategyIndex>idx) it.strategyIndex--;
           return it;
         });
         persist();
         renderStrategies();
-        renderIntents();
+        renderIntents(); // 删除涉及索引整体变化，完整重渲一次
       });
       actions.appendChild(del);
       header.appendChild(actions);
 
       const input = document.createElement('textarea');
-      input.placeholder='填写 strategy 内容…';
+      input.placeholder='填写 策略 内容…';
       input.value = s || '';
       input.addEventListener('input', (e)=>{
         state.strategies[idx] = e.target.value;
         persist();
-        renderIntents(); // 更新下拉显示摘要
+        updateIntentStrategyDropdowns(); // ✅ 仅更新各意图的下拉文本
       });
 
       item.appendChild(header);
@@ -567,7 +549,7 @@
         });
         persist();
         renderScripts();
-        renderIntents();
+        renderIntents(); // 需要让勾选区反映变化
       });
       actions.appendChild(del);
       header.appendChild(actions);
@@ -578,7 +560,7 @@
       input.addEventListener('input', (e)=>{
         state.scripts[idx] = e.target.value;
         persist();
-        renderIntents(); // 更新勾选列表摘要
+        renderIntents(); // 让勾选区文案更新
       });
 
       item.appendChild(header);
@@ -619,7 +601,7 @@
         });
         persist();
         renderQuestions();
-        renderIntents();
+        renderIntents(); // 让勾选区反映变化
       });
       actions.appendChild(del);
       header.appendChild(actions);
@@ -630,12 +612,27 @@
       input.addEventListener('input', (e)=>{
         state.questions[idx] = e.target.value;
         persist();
-        renderIntents(); // 更新勾选列表摘要
+        renderIntents(); // 让勾选区文案更新
       });
 
       item.appendChild(header);
       item.appendChild(input);
       questionList.appendChild(item);
+    });
+  }
+
+  // ---------- 仅更新“绑定策略”下拉，不影响勾选状态 ----------
+  function updateIntentStrategyDropdowns(){
+    const selects = intentList.querySelectorAll('select[data-role="strategySel"]');
+    selects.forEach(sel=>{
+      const prev = sel.value === '' ? null : Number(sel.value);
+      sel.innerHTML = '';
+      const defaultOpt = new Option('选择策略（strategy n）','', prev===null);
+      sel.appendChild(defaultOpt);
+      state.strategies.forEach((s, sidx)=>{
+        const opt = new Option(`strategy ${sidx+1}：${clip(s)}`, String(sidx), false, prev===sidx);
+        sel.appendChild(opt);
+      });
     });
   }
 
